@@ -12,7 +12,7 @@ Prerequisites
 Go 1.16 or later
 Installation
 Clone the repository:
-sh
+
 
 
 git clone https://github.com/yourusername/tcp-chat-server.git
@@ -24,8 +24,6 @@ sh
 go build -o TCPChat main.go
 Usage
 Start the server:
-sh
-
 
 ./TCPChat [port]
 If no port is specified, the server will default to port 8080.
