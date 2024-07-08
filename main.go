@@ -20,6 +20,7 @@ type Client struct {
 var clients []Client
 var mutex sync.Mutex
 var history []string
+var pendingClients int
 
 func main() {
 	logFile, err := os.Create("log.txt")
@@ -32,7 +33,7 @@ func main() {
 
 	var port string
 	if len(os.Args) == 1 {
-		port = ":8080"
+		port = ":8989"
 		fmt.Printf("Listening on the port %s\n", port)
 	} else if len(os.Args) == 2 {
 		port = ":" + os.Args[1]
@@ -55,13 +56,16 @@ func main() {
 			continue
 		}
 
-		// Limit the number of clients to 10
-		if len(clients) >= 10 {
-			log.Println("Maximum number of clients reached. Connection rejected.")
-			conn.Write([]byte("Maximum number of clients reached. Connection rejected."))
-			conn.Close() // to close connection during rejection
-			continue     // to move to next iteration if one is rejected
+		mutex.Lock()
+		if len(clients) >= 3 || pendingClients >= 3 {
+			mutex.Unlock()
+			log.Println("Maximum number of clients reached or too many pending clients. Connection rejected.")
+			conn.Write([]byte("Maximum number of clients reached or too many pending clients. Connection rejected.\n"))
+			conn.Close()
+			continue
 		}
+		pendingClients++
+		mutex.Unlock()
 
 		go handleClient(conn)
 	}
@@ -73,6 +77,9 @@ func handleClient(conn net.Conn) {
 	// Get client's name
 	name := getClientName(conn)
 	if name == "" {
+		mutex.Lock()
+		pendingClients--
+		mutex.Unlock()
 		return
 	}
 
@@ -84,9 +91,10 @@ func handleClient(conn net.Conn) {
 	}
 
 	// Add the client to the list of active clients
-	mutex.Lock() // go routines can't enter
+	mutex.Lock()
 	clients = append(clients, client)
-	mutex.Unlock() // now they can enter, this is used to ensure they pass one at a time the go routines
+	pendingClients--
+	mutex.Unlock()
 
 	// Send chat history to the client
 	sendChatHistory(client)
@@ -152,8 +160,10 @@ func getClientName(conn net.Conn) string {
 	var name string
 	for {
 		// Prompt the client to enter their name
+		mutex.Lock()
 		conn.Write([]byte((penguin)))
 		conn.Write([]byte("[ENTER YOUR NAME]: "))
+		mutex.Unlock()
 
 		// Read a line of input from the client
 		nameBytes, err := reader.ReadBytes('\n')
